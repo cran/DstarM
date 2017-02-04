@@ -27,7 +27,7 @@
 #' \code{c(200, 50, 10)} means: Do 200 iterations then check for convergence, do 50
 #' iterations then check for convergence, check every 10 iterations for convergence until
 #' itermax is reached. Defaults to \code{Optim = list(reltol = 1e-6, itermax = 1e3,
-#' steptol = 50, CR = .9, trace = 0)}.
+#' steptol = 50, CR = .9, trace = 0, parallelType = 0)}.
 #' @param splits Numeric vector determining which conditions have an equal nondecision density.
 #' Identical values in two positions indicate that the conditions corresponding to the indices
 #' of those values have an identical nondecision distribution.
@@ -119,7 +119,7 @@ estDstarM = function(data, tt, restr = NULL, fixed = list(), lower, upper,
   if (any(!(c('upper', 'lower') %in% data$response))) {
     rsp = unique(data$response)
     if (!(length(rsp) ==  1 & rsp[1] %in% c('upper', 'lower'))) {
-      note = sprintf("Note: Unique responses (%s) recoded to 'lower' and 'upper' respectively.\n",
+      note = sprintf("Note: Unique responses (%s) are recoded to 'lower' and 'upper' respectively.\n",
                      paste(sort(rsp), collapse = ', '))
       cat(note)
     }
@@ -140,12 +140,12 @@ estDstarM = function(data, tt, restr = NULL, fixed = list(), lower, upper,
   if (missing(lower) | missing(upper)) {
     if (DstarM) {
       parnames =  c('a', 'v', 'z', 'sz', 'sv')
-      lower =     c(.01, -6,  .05,   0,    0)
-      upper =     c(  2,  6,  .95, .99,   10)
+      lower =     c(.01, -6,  .05,  .01,   0)
+      upper =     c(  2,  6,  .95,  .99,  10)
     } else {
-      parnames =  c('a','v','t0','z', 'sz', 'sv', 'st0')
-      lower =     c(.5, -5,  .1, .05,   0,    0,    0)
-      upper =     c( 2,  5,  .8, .95, .99,   10,    1)
+      parnames =  c('a', 'v', 't0',  'z', 'sz', 'sv', 'st0')
+      lower =     c(.01,  -6,   .1,  .05,  .01,    0,    0)
+      upper =     c(  2,   6,   .8,  .95,  .99,   10,    1)
     }
   } else {
     stopifnot(length(lower) ==  length(upper), all(lower < upper))
@@ -182,18 +182,19 @@ estDstarM = function(data, tt, restr = NULL, fixed = list(), lower, upper,
   for (i in 1:dim(group)[2L]) {
     mm2[group[, i], i] = 1
   }
+  rt = split(data$rt, list(data$response, data$condition))
+  n = (ql <- lengths(rt)) %*% mm2
+
   if (is.null(mg)) { # obtain data density
-    rt = split(data$rt, list(data$response, data$condition))
-    n = (ql <- lengths(rt)) %*% mm2
     g = getGhat(rt = rt, tt, ncondition, mm, by)
   } else { # if a model or data density is supplied
     if (!all(is.matrix(mg), dim(mg) == c(length(tt), 2*ncondition))) {
       stop('mg must be a matrix of length(tt) x ncondition.', call. = FALSE)
     }
     g = mg
-    n = Inf # irrelevent number
+    #n = Inf # irrelevent number
     SE = 0
-    ql = rep.int(1, dim(g)[2L])
+    #ql = rep.int(1, dim(g)[2L])
   }
   # calculate first 5 moments - done this way to maybe add kurtosis restrictions in the future
   g2 = g %*% mm2
@@ -202,8 +203,10 @@ estDstarM = function(data, tt, restr = NULL, fixed = list(), lower, upper,
   for (i in 1:dim(g2)[2L]) {
     moments.data[, i] = unlist(lapply(0:4, nth.cmomentS, x = tt, fx = g2[, i]))
   }
-  # convolve data density with uniform kernel
-  if (DstarM) {
+  # convolve data density with uniform kernel - only do this when no own density is supplied
+  # perhaps make it possible to also smooth? although users can also do this themselves since
+  # they are already supplying their own densities.
+  if (DstarM && is.null(mg)) {
     kernel = rev(stats::dunif(tt, 0, h))
     for (i in 1:dim(g)[2L]) {
       g[, i] = customConvolveO(as.double(g[, i]), kernel)[seq_along(tt)]
@@ -214,7 +217,7 @@ estDstarM = function(data, tt, restr = NULL, fixed = list(), lower, upper,
   colnames(g) = names(rt) # name columns of g after conditions for clarity
   mu.data = moments.data[1, ]
   var.data = moments.data[3, ]
-  # apply SE
+  # apply SE -  gives the variance restriction some lenience
   var.data = var.data * (1 + SE * sqrt(2 / (n - 1)))
 
   # ii and jj are vectors that contain all combinations of p and p' to compare in the objective function
@@ -269,6 +272,7 @@ estDstarM = function(data, tt, restr = NULL, fixed = list(), lower, upper,
                   forceRestriction = forceRestriction, by = by)
 
   if (missing(pars)) { # change to is is.null(pars)?
+
     if (length(fixed)) {
       # remove fixed parameters
       indFixed = which(names(lower) %in%  fixed[1L, ]) # get parameter indices to remove
@@ -283,9 +287,11 @@ estDstarM = function(data, tt, restr = NULL, fixed = list(), lower, upper,
       upper = upper[-indFixed]
       replacement = sapply(strsplit(fixed[2, ], ' '), `[[`, 1) # finds first value; extend to ' ' and */+- ? # does this equal making stuff in the restr.mat in the same column equal?
       fixedMat = rbind(fixed, replacement)
-      fixed = list(fixedMat = fixedMat, indFixed = indFixed)
+      fixed = list(fixedMat = fixedMat, indFixed = indFixed,
+                   isNumeric = suppressWarnings(!is.na(as.numeric(fixedMat[3, ]))))
     }
     argsList$fixed = fixed
+
     # do differential evolution
     nrep = ceiling((Optim$itermax - sum(Optim$steptol[1:(length(Optim$steptol) - 1)])) / Optim$steptol[length(Optim$steptol)])
     if (nrep <= 1L) {
@@ -330,9 +336,10 @@ estDstarM = function(data, tt, restr = NULL, fixed = list(), lower, upper,
       prevSize = 0 # to avoid deleting notes/ Starting...
       # do DEoptim for steptol iterations with custom printing and custom convergence checks
       for (i in 1:nrep) {
+        # This problem has been solved. Commented code is left here in case something comes up.
         # to uncomment when DEoptim() freezes.
         # saves the random seed so the exact call to DEoptim() can be investigated.
-        # if (sum(Optim$steptol[1:(i-1)]) >= 600) {
+        # if (sum(Optim$steptol[1:(i-1)]) >= 600) { # 600 should be iteration where DEoptim freezes
         #   # toSave = ls(name = sys.frame(), all.names = TRUE)
         #   randomseed = .Random.seed
         #   toSave = ls(all.names = TRUE)
@@ -348,8 +355,10 @@ estDstarM = function(data, tt, restr = NULL, fixed = list(), lower, upper,
         newval = out$optim$bestval
 
         improvement = oldval - newval
+
         # print progress
-        tempOut$Bestvals = imposeFixations(fixed = fixed, pars = out$optim$bestmem)
+        tempOut$Bestvals = imposeFixations(fixed = fixed, pars = out$optim$bestmem, parnames = names(lower))
+        names(tempOut$Bestvals)[nchar(names(tempOut$Bestvals)) == 0] = fixed$fixedMat[1, ]
         replicate(prevSize,  cat('\010'))
         msg1 = utils::capture.output(
           cat(sprintf('Total iterations done: %s \012Improvement over last %s iterations: %10g \012Objective function value: %10g \012Current parameter estimates:\012',
@@ -365,19 +374,20 @@ estDstarM = function(data, tt, restr = NULL, fixed = list(), lower, upper,
         }
       }
       niter = sum(Optim$steptol[1:i])
-    } else {
-      # do DEoptim with build in convergence
+
+    } else { # do DEoptim with build in convergence
+
       argsList$control$itermax = Optim$itermax
       argsList$control$steptol = Optim$steptol[1]
       argsList$control$reltol = Optim$reltol
       out = do.call(DEoptim::DEoptim, argsList)
       niter = out$optim$iter
       nfeval = out$optim$nfeval
+
     }
+
     # gather relevant output
-    Bestvals = imposeFixations(fixed = fixed, pars = out$optim$bestmem)
-    # turn restr.mat back into a matrix
-    # restr.mat = do.call(cbind, restr.mat)
+    Bestvals = imposeFixations(fixed = fixed, pars = out$optim$bestmem, parnames = names(lower))
     # calculate model densities at parameter estimates
     pars = Bestvals[c(restr.mat)] # extract all parameters
     # dim(pars) = dim(restr.mat)
@@ -385,14 +395,17 @@ estDstarM = function(data, tt, restr = NULL, fixed = list(), lower, upper,
     out = list(Bestvals = Bestvals, fixed = fixed, GlobalOptimizer = out,
                Debug = list(niter = niter, nfeval = nfeval, itermax = Optim$itermax),
                note = note)
+
     if (verbose) {
       cat('\nAnalyses complete!\n')
     }
+
   } else { # calculate the objective function for a given set of parameters
+
     argsList$pars = pars
     argsList$all = TRUE
-    out = list(objVals = do.call(total.objective, argsList),
-               pars = pars, Bestvals = pars)
+    out = list(objVals = do.call(total.objective, argsList), pars = pars, Bestvals = pars)
+
   }
   # calculate model densities at parameter estimates
   dim(pars) = dim(restr.mat)
@@ -405,12 +418,12 @@ estDstarM = function(data, tt, restr = NULL, fixed = list(), lower, upper,
     colnames(m) = names(rt)
   } else {
     var.m = NULL
-    warning('Solution contained improper pdfs. No decision model distributions have been saved. Perhaps rerun the analysis with a more a narrow time grid.',
+    warning("Solution contained improper pdfs. No decision model distributions have been saved. Perhaps rerun the analysis with a more a narrow time grid.",
             immediate. = TRUE, call. = FALSE)
   }
   out[c('tt', 'g.hat', 'modelDist', 'ncondition', 'var.data', 'var.m', 'restr.mat',
-        'splits', 'n', 'DstarM', 'fun.density', 'fun.dist', 'h')] =
-    list(tt, g, m, ncondition, var.data, var.m, restr.mat, splits, n, DstarM, fun.density, fun.dist, h)
+        'splits', 'n', 'DstarM', 'fun.density', 'fun.dist', 'h', "args.density", "args.dist")] =
+    list(tt, g, m, ncondition, var.data, var.m, restr.mat, splits, n, DstarM, fun.density, fun.dist, h, args.density, args.dist)
   class(out) = 'DstarM'
   return(out)
 }
@@ -481,6 +494,7 @@ getPdf = function(pars.list, tt, DstarM, mm, oscPdf = TRUE,
       return(NULL)
     } # if they all pass oscCheck
   }
+
   cor = 1 / apply(pdf %*% mm, 2, simpson, x = tt) # ensure pdfs integrate to 1.
   if (any(is.infinite(cor))) { # return NULL if pdfs are gibberish.
     return(NULL)
@@ -610,7 +624,8 @@ total.objective = function(pars, tt, g, ql, restr.mat,
                            fun.density, args.density,
                            fun.dist, args.dist, var.data, parnames = NULL, by) {
   # impose parameter fixations
-  pars = imposeFixations(fixed = fixed, pars = pars)
+  # browser()
+  pars = imposeFixations(fixed = fixed, pars = pars, parnames = parnames)
   # get all unique parameter configurations taking restrictions into account
   pars.list = lapply(restr.mat, function(ind, pars) pars[ind], pars)
 
@@ -626,7 +641,7 @@ total.objective = function(pars, tt, g, ql, restr.mat,
     for (i in 1L:length(out)) { # calc chi square dist
       args.dist$a = g[, i]
       args.dist$b = m[, i]
-      out[i] = do.call(fun.dist, args.dist)
+      out[i] = do.call(fun.dist, args.dist) * 100 * ql[i] / sum(ql)
     }
   } else { # DstarM estimation
     if (forceRestriction) { # check for violations of restriction on variance
@@ -642,7 +657,7 @@ total.objective = function(pars, tt, g, ql, restr.mat,
       # args.dist$b = customConvolveO(g[, jj[l]], rev(m[, ii[l]]))[seq_along(tt)]
       args.dist$a = customConvolveO(g[, ii[l]], by * rev(m[, jj[l]]))[seq_along(tt)]
       args.dist$b = customConvolveO(g[, jj[l]], by * rev(m[, ii[l]]))[seq_along(tt)]
-      out[l] = do.call(fun.dist, args.dist)
+      out[l] = do.call(fun.dist, args.dist) * 100 * (ql[ii[l]] + ql[jj[l]]) / sum(ql)
     }
   }
   if (all) { # return unsummed distance vector for debugging purposes
@@ -653,22 +668,35 @@ total.objective = function(pars, tt, g, ql, restr.mat,
 }
 
 # imposes fixations from fixed onto pars
-imposeFixations = function(fixed, pars) {
+imposeFixations = function(fixed, pars, parnames) {
+
   if (length(fixed)) {
-    for (i in 1L:length(fixed$indFixed)) { # loop of everything to be looked up
-      replacement = pars[which(names(pars) == fixed$fixedMat[3L, i])][1L] # try to look up value by name (i.e. when z = a/2)
-      if (is.na(replacement)) { # if na it must be fixed to a value
-        replacement = fixed$fixedMat[3L, i]
+    for (i in 1L:length(fixed$indFixed)) { # loop over everything to be looked up
+
+      if (fixed$isNumeric[i]) { # numeric replacement
+
+        insert = as.numeric(fixed$fixedMat[3L, i])
+
+      } else { # expression (i.e. z = a/2)
+
+        replacement = pars[which(parnames == fixed$fixedMat[3L, i])][1L]
+        insert = eval(parse(text = gsub(pattern = fixed$fixedMat[3L, i],
+                                        replacement = replacement,
+                                        x = fixed$fixedMat[2L, i])))
+
       }
+
       # execute operation to which parameter was fixed
-      insert = eval(parse(text = gsub(pattern = fixed$fixedMat[3L, i], replacement = replacement, x = fixed$fixedMat[2L, i])))
+
       pars = append(pars, insert, fixed$indFixed[i] - 1L) # append fixations to parameter vector
-      names(pars)[fixed$indFixed[i]] = fixed$fixedMat[1L, i] # add names to parameter vector
+      # names(pars)[fixed$indFixed[i]] = fixed$fixedMat[1L, i] # add names to parameter vector
     }
   }
+
   return(pars)
+
 }
 
-is.DstarM = function(x) class(x) == 'DstarM'
+is.DstarM = function(x) identical(class(x), 'DstarM')
 
 
