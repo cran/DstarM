@@ -4,7 +4,7 @@
 \alias{chisqFit}
 \title{Calculate model fit}
 \usage{
-chisqFit(resObserved, data, DstarM = FALSE, tt = NULL)
+chisqFit(resObserved, data, DstarM = FALSE, tt = NULL, formula = NULL)
 }
 \arguments{
 \item{resObserved}{either output from \code{\link{estObserved}} or a matrix containing custom densities to calculate the fitness for.}
@@ -14,6 +14,8 @@ chisqFit(resObserved, data, DstarM = FALSE, tt = NULL)
 \item{DstarM}{Logical. Should the DstarM fit measure be calculated or the traditional fit measure?}
 
 \item{tt}{time grid custom densities where calculated on. Should only be supplied if \code{resOberved} is a matrix containing custom densities}
+
+\item{formula}{Optional formula argument, for when columns names in the data are different from those used to obtain the results.}
 }
 \description{
 Calculate model fit
@@ -44,7 +46,7 @@ define restriction matrix
 restr = matrix(1:5, 5, 3)
 restr[2, 2:3] = 6:7 # allow drift rates to differ
 # fix parameters for speed up
-fixed = matrix(c("z1", "a1 / 2", 'sz1', .5, 'sv1', .5), 2, 3)
+fixed = matrix(c('z1', 'a1 / 2', 'sz1', .5, 'sv1', .5), 2, 3)
 resD = estDstarM(data = dat, tt = tt, restr = restr, fixed = fixed,
                  Optim = list(parallelType = 1))
 resN = estND(resD, Optim = list(parallelType = 1))
