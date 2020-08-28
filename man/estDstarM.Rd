@@ -4,19 +4,37 @@
 \alias{estDstarM}
 \title{Do a D*M analysis}
 \usage{
-estDstarM(formula = NULL, data, tt, restr = NULL, fixed = list(), lower,
-  upper, Optim = list(), DstarM = TRUE, SE = 0, oscPdf = TRUE,
-  splits = rep(0L, (ncondition)), forceRestriction = TRUE, mg = NULL,
-  h = 1, pars, fun.density = Voss.density, args.density = list(),
-  fun.dist = chisq, args.dist = list(tt = tt), verbose = 1L,
-  useRcpp = TRUE)
+estDstarM(
+  formula = NULL,
+  data,
+  tt,
+  restr = NULL,
+  fixed = list(),
+  lower,
+  upper,
+  Optim = list(),
+  DstarM = TRUE,
+  SE = 0,
+  oscPdf = TRUE,
+  splits = rep(0L, (ncondition)),
+  forceRestriction = TRUE,
+  mg = NULL,
+  h = 1,
+  pars,
+  fun.density = Voss.density,
+  args.density = list(),
+  fun.dist = chisq,
+  args.dist = list(tt = tt),
+  verbose = 1L,
+  useRcpp = TRUE
+)
 }
 \arguments{
 \item{formula}{A formula object of the form:
 \code{binary response ~ reaction time + condition1 * condition2 * ... conditionN}.}
 
 \item{data}{A dataframe for looking up data specified in formula.
-For backwards compatability this can also be with: a column named \code{rt} containing response times in ms,
+For backwards compatibility this can also be with: a column named \code{rt} containing response times in ms,
 a column named \code{response} containing at most 2 response options, and an
 optional column named \code{condition} containing a numeric index as to which conditions
 observations belong.}
@@ -52,7 +70,7 @@ between data and model is minimized.}
 the variance restriction a bit.}
 
 \item{oscPdf}{Logical, if TRUE check for oscillations in calculated densities and
-remove densities with oscilations.}
+remove densities with oscillations.}
 
 \item{splits}{Numeric vector determining which conditions have an equal nondecision density.
 Identical values in two positions indicate that the conditions corresponding to the indices
@@ -60,7 +78,7 @@ of those values have an identical nondecision distribution.}
 
 \item{forceRestriction}{if TRUE the variance restriction is enforced.}
 
-\item{mg}{Supply a data density, usefull if a uniform kernel approximation does not suffice.
+\item{mg}{Supply a data density, useful if a uniform kernel approximation does not suffice.
 Take care that densities of response categories within conditions are degenerate and therefore integrate to the proportion a category was observed (and not to 1).}
 
 \item{h}{bandwidth of a uniform kernel used to generate data based densities.}
@@ -81,7 +99,7 @@ Defaults to a chi-square distance.}
 Estimation will speed up if set to 0. If set to TRUE, \code{Optim$trace} will be
 forced to 0, hereby disabling the build in printing of \code{DEoptim}. To enable the
 printing of \code{DEoptim}, set \code{verbose} to 0 and specify \code{Optim$trace}.
-\code{Optim}. If set to 1, ETA refers to the expected maximum time until completetion (when the iterations limit is reached).}
+\code{Optim}. If set to 1, ETA refers to the expected maximum time until completion (when the iterations limit is reached).}
 
 \item{useRcpp}{Logical, setting this to true will make the objective function use an Rcpp implementation
 of \code{Voss.density} with the distance function \code{chisq}. This gains speed at the cost of flexibility.}

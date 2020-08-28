@@ -1,7 +1,7 @@
 Package: DstarM
 Type: Package
 Title: Analyze Two Choice Reaction Time Data with the D*M Method
-Version: 0.3.0
+Version: 0.4.0
 Author: Don van den Bergh, Stijn Verdonck, Francis Tuerlinckx
 Maintainer: Don van den Bergh <donvdbergh@hotmail.com>
 Description: A collection of functions to estimate parameters of a diffusion model via a D*M analysis. Build in models are: the Ratcliff diffusion model, the RWiener diffusion model, and Linear Ballistic Accumulator models. Custom models functions can be specified as long as they have a density function.
@@ -11,10 +11,11 @@ Imports: DEoptim, RWiener, rtdists, stats, ggplot2, Rcpp
 LinkingTo: Rcpp, RcppArmadillo
 NeedsCompilation: yes
 ByteCompile: TRUE
-RoxygenNote: 6.0.1
+Encoding: UTF-8
+RoxygenNote: 7.1.0
 URL: https://github.com/vandenman/DstarM
 BugReports: https://github.com/vandenman/DstarM/issues
 Suggests: testthat
-Packaged: 2018-05-18 08:36:52 UTC; donvd
+Packaged: 2020-08-28 12:57:58 UTC; dvdb
 Repository: CRAN
-Date/Publication: 2018-05-18 09:28:10 UTC
+Date/Publication: 2020-08-28 18:10:03 UTC
